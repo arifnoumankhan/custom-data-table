@@ -1,0 +1,22 @@
+name: custom_data_table
+description: A feature-rich, themeable data table for Flutter with pagination, sorting, export (CSV/Excel/PDF), row selection, frozen columns, inline editing, and a lightweight read-only variant.
+version: 0.1.0
+homepage: https://github.com/arifnoumankhan/custom-data-table
+repository: https://github.com/arifnoumankhan/custom-data-table
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.0
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
