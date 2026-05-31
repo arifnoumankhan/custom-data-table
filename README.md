@@ -1,5 +1,5 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![pub version](https://img.shields.io/badge/version-0.1.0-blue)](pubspec.yaml)
+[![pub version](https://img.shields.io/badge/version-0.1.1-blue)](pubspec.yaml)
 
 # custom_data_table
 
@@ -28,7 +28,7 @@ A feature-rich, themeable Flutter data table with:
 
 ```yaml
 dependencies:
-  custom_data_table: ^0.1.0
+  custom_data_table: ^0.1.1
 ```
 
 ### From GitHub
@@ -38,7 +38,15 @@ dependencies:
   custom_data_table:
     git:
       url: https://github.com/arifnoumankhan/custom-data-table.git
-      ref: main
+      ref: v0.1.1   # or main for latest
+```
+
+### Local path (development)
+
+```yaml
+dependencies:
+  custom_data_table:
+    path: ../custom_data_table
 ```
 
 Then run:
@@ -112,6 +120,7 @@ class _MyPageState extends State<MyPage> {
 | `onPerPageChanged` | `void Function(int)?` | — | Called when per-page count changes |
 | `hidePagination` | `bool` | `false` | Hide the pagination row entirely |
 | `title` | `String?` | — | Table title shown in the toolbar |
+| `showTitleToolbar` | `bool` | `true` | When `false`, hides the entire title toolbar (title, style picker, search, export) |
 | `showExportButtons` | `bool` | `true` | Show the export popup menu icon |
 | `exportFilename` | `String?` | — | Filename hint passed to export callbacks |
 | `onExportCsv` | `Function?` | — | Called with `(data, headers)` for CSV export |

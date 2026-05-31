@@ -120,6 +120,11 @@ class CustomDataTableLight extends StatelessWidget {
     bool wrapHeaderLabels = true,
     List<double>? columnWidths,
     double defaultColumnWidth = 120,
+    double headingRowHeight = 44,
+    double dataRowMinHeight = 48,
+    double dataRowMaxHeight = double.infinity,
+    double columnSpacing = 20,
+    double horizontalMargin = 12,
     Color? headerColor,
   }) {
     return CustomDataTableLight._text(
@@ -133,6 +138,11 @@ class CustomDataTableLight extends StatelessWidget {
       wrapHeaderLabels: wrapHeaderLabels,
       columnWidths: columnWidths,
       defaultColumnWidth: defaultColumnWidth,
+      headingRowHeight: headingRowHeight,
+      dataRowMinHeight: dataRowMinHeight,
+      dataRowMaxHeight: dataRowMaxHeight,
+      columnSpacing: columnSpacing,
+      horizontalMargin: horizontalMargin,
       headerColor: headerColor,
     );
   }

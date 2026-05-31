@@ -30,7 +30,7 @@ class TableAction {
 }
 
 // ---------------------------------------------------------------------------
-// Convenience subclasses — mirrors the set in the Barioo source project.
+// Convenience subclasses for common row actions.
 // ---------------------------------------------------------------------------
 
 class TableActionEdit extends TableAction {

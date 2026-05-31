@@ -1,3 +1,9 @@
+## 0.1.1
+
+* `CustomDataTable.showTitleToolbar` — when `false`, hides the entire title toolbar (title, style picker, search, export) without changing other toolbar flags.
+* `CustomDataTableLight.text` — optional `headingRowHeight`, `dataRowMinHeight`, `dataRowMaxHeight`, `columnSpacing`, and `horizontalMargin`.
+* Column reorder drag handler cleanup; removed unused state in the main table widget.
+
 ## 0.1.0
 
 * Initial release.

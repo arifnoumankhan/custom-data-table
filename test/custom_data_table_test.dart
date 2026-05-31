@@ -73,6 +73,48 @@ void main() {
       await tester.pump();
       expect(find.byType(CustomDataTable), findsOneWidget);
     });
+
+    testWidgets('shows title when provided', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomDataTable(
+              title: 'My Table Title',
+              columns: columns,
+              data: data,
+              perPage: 10,
+              currentPage: 1,
+              lastPage: 1,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('My Table Title'), findsOneWidget);
+    });
+
+    testWidgets('hides title toolbar when showTitleToolbar is false', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomDataTable(
+              title: 'Hidden Toolbar Title',
+              showTitleToolbar: false,
+              enableStylePicker: true,
+              showSearch: true,
+              showExportButtons: true,
+              columns: columns,
+              data: data,
+              perPage: 10,
+              currentPage: 1,
+              lastPage: 1,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Hidden Toolbar Title'), findsNothing);
+    });
   });
 
   group('CustomDataTableLight', () {

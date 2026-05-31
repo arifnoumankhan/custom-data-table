@@ -142,6 +142,11 @@ class CustomDataTable extends StatefulWidget {
   final bool showExportButtons;
   final String? exportFilename;
   final String? title;
+
+  /// When `false`, hides the entire title toolbar (title, style picker, search,
+  /// export buttons) regardless of those individual flags.
+  final bool showTitleToolbar;
+
   final Function(List<List<dynamic>> data, List<String> headers)? onExportCsv;
   final Function(List<List<dynamic>> data, List<String> headers)? onExportExcel;
   final Function(List<List<dynamic>> data, List<String> headers, String title)? onExportPdf;
@@ -276,6 +281,7 @@ class CustomDataTable extends StatefulWidget {
     this.showExportButtons = true,
     this.exportFilename,
     this.title,
+    this.showTitleToolbar = true,
     this.onExportCsv,
     this.onExportExcel,
     this.onExportPdf,
@@ -350,7 +356,6 @@ class _CustomDataTableState extends State<CustomDataTable> {
 
   Timer? _searchDebounceTimer;
   List<int> _columnOrder = [];
-  int? _draggingColumnIndex;
 
   int? _sortColIndex;
   bool _sortAsc = true;
@@ -1406,6 +1411,8 @@ class _CustomDataTableState extends State<CustomDataTable> {
   // ---------------------------------------------------------------------------
 
   Widget _buildToolbar(BuildContext context, bool isMobile) {
+    if (!widget.showTitleToolbar) return const SizedBox.shrink();
+
     final hasToolbar = widget.title != null ||
         widget.showExportButtons ||
         widget.enableStylePicker ||
@@ -2253,9 +2260,6 @@ class _CustomDataTableState extends State<CustomDataTable> {
               opacity: 0.3,
               child: Icon(Icons.drag_handle, size: 20, color: Colors.grey),
             ),
-            onDragStarted: () =>
-                setState(() => _draggingColumnIndex = _visibleColumns.indexOf(col)),
-            onDragEnd: (_) => setState(() => _draggingColumnIndex = null),
             child: Tooltip(
               message: 'Drag to reorder',
               child: MouseRegion(
@@ -2388,8 +2392,6 @@ class _CustomDataTableState extends State<CustomDataTable> {
     TextStyle cellStyle,
     bool isFrozen,
   ) {
-    final preset = _stylePreset;
-    final resolved = _resolvedStyle!;
     final rows = <DataRow>[];
 
     for (int i = 0; i < _displayData.length; i++) {
