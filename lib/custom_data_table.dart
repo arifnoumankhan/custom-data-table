@@ -3,9 +3,11 @@
 /// lightweight read-only variant.
 library custom_data_table;
 
+export 'src/models/pagination_per_page_option.dart';
 export 'src/models/table_action.dart';
 export 'src/models/table_column.dart';
 export 'src/models/table_keys.dart';
 export 'src/theme/table_theme.dart';
 export 'src/widgets/custom_data_table.dart';
 export 'src/widgets/custom_data_table_light.dart';
+export 'src/widgets/custom_pagination_control_widget.dart';

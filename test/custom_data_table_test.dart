@@ -117,6 +117,177 @@ void main() {
     });
   });
 
+  group('CustomDataTable footer alignment', () {
+    testWidgets('footer cells align under column headers when showActions is true',
+        (tester) async {
+      const cols = [
+        TableColumn(key: 'ref', header: 'Ref', width: 100),
+        TableColumn(key: 'amount', header: 'Amount', width: 120),
+      ];
+      const footerByKey = {
+        'ref': 'Total:',
+        'amount': 'RM 10.000',
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 900,
+              height: 500,
+              child: CustomDataTable(
+                columns: cols,
+                data: const [
+                  {'ref': 'INV-1', 'amount': '5.000'},
+                ],
+                showActions: true,
+                actions: const [TableActionView()],
+                totalRowByColumnKey: footerByKey,
+                perPage: 10,
+                currentPage: 1,
+                lastPage: 1,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Total:'), findsOneWidget);
+      expect(find.text('RM 10.000'), findsOneWidget);
+
+      final refHeaderRect = tester.getRect(find.text('Ref'));
+      final totalRect = tester.getRect(find.text('Total:'));
+      final amountHeaderRect = tester.getRect(find.text('Amount'));
+      final amountFooterRect = tester.getRect(find.text('RM 10.000'));
+
+      expect((totalRect.left - refHeaderRect.left).abs(), lessThan(12));
+      expect((amountFooterRect.left - amountHeaderRect.left).abs(), lessThan(12));
+    });
+
+    testWidgets('totalRowByColumnKey maps values by column key', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomDataTable(
+              columns: columns,
+              data: data,
+              totalRowByColumnKey: const {
+                'name': 'Total:',
+                'age': '105',
+              },
+              perPage: 10,
+              currentPage: 1,
+              lastPage: 1,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Total:'), findsOneWidget);
+      expect(find.text('105'), findsOneWidget);
+    });
+  });
+
+  group('CustomPaginationControlWidget', () {
+    testWidgets('renders per-page dropdown and page controls', (tester) async {
+      var perPage = 25;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomPaginationControlWidget(
+              currentPerPage: perPage,
+              currentPage: 2,
+              lastPage: 5,
+              onPerPageChanged: (value) => perPage = value,
+              onNext: (_) {},
+              onPrev: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Show'), findsOneWidget);
+      expect(find.text('Page 2 of 5'), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<PaginationPerPageOption>), findsOneWidget);
+    });
+
+    testWidgets('uses custom perPageOptions', (tester) async {
+      const customOptions = [
+        PaginationPerPageOption(value: 5, label: 'Five'),
+        PaginationPerPageOption(value: 15, label: 'Fifteen'),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomPaginationControlWidget(
+              currentPerPage: 5,
+              currentPage: 1,
+              lastPage: 3,
+              perPageOptions: customOptions,
+              onPerPageChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButtonFormField<PaginationPerPageOption>));
+      await tester.pumpAndSettle();
+      expect(find.text('Fifteen').last, findsOneWidget);
+    });
+  });
+
+  group('CustomDataTable pagination', () {
+    testWidgets('embeds per-page dropdown when onPerPageChanged is set', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomDataTable(
+              columns: columns,
+              data: data,
+              perPage: 25,
+              currentPage: 1,
+              lastPage: 3,
+              onPerPageChanged: (_) {},
+              onNext: (_) {},
+              onPrev: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CustomPaginationControlWidget), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<PaginationPerPageOption>), findsOneWidget);
+    });
+
+    testWidgets('hides per-page dropdown when showPerPageDropdown is false', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomDataTable(
+              columns: columns,
+              data: data,
+              perPage: 25,
+              currentPage: 1,
+              lastPage: 3,
+              showPerPageDropdown: false,
+              onPerPageChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CustomPaginationControlWidget), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<PaginationPerPageOption>), findsNothing);
+    });
+  });
+
   group('CustomDataTableLight', () {
     testWidgets('renders text variant without crashing', (tester) async {
       await tester.pumpWidget(

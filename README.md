@@ -1,5 +1,5 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![pub version](https://img.shields.io/badge/version-0.1.1-blue)](pubspec.yaml)
+[![pub version](https://img.shields.io/badge/version-0.1.2-blue)](pubspec.yaml)
 
 # custom_data_table
 
@@ -28,7 +28,7 @@ A feature-rich, themeable Flutter data table with:
 
 ```yaml
 dependencies:
-  custom_data_table: ^0.1.1
+  custom_data_table: ^0.1.2
 ```
 
 ### From GitHub
@@ -38,7 +38,7 @@ dependencies:
   custom_data_table:
     git:
       url: https://github.com/arifnoumankhan/custom-data-table.git
-      ref: v0.1.1   # or main for latest
+      ref: v0.1.2   # or main for latest
 ```
 
 ### Local path (development)
@@ -112,12 +112,15 @@ class _MyPageState extends State<MyPage> {
 | `data` | `List<Map<String, dynamic>>` | required | Row data maps keyed by `TableColumn.key` |
 | `headers` | `List<String>?` | — | Legacy: plain header strings (use with `rows`) |
 | `rows` | `List<List<dynamic>>?` | — | Legacy: positional row values |
-| `perPage` | `int` | required | Rows per page (for pagination display) |
+| `perPage` | `int` | required | Current rows-per-page value (must match a [PaginationPerPageOption.value] or appears as a custom dropdown entry) |
 | `currentPage` | `int` | required | Current page number |
 | `lastPage` | `int` | required | Total number of pages |
-| `onNext` | `void Function(int)?` | — | Called when the Next page button is tapped |
-| `onPrev` | `void Function(int)?` | — | Called when the Prev page button is tapped |
-| `onPerPageChanged` | `void Function(int)?` | — | Called when per-page count changes |
+| `perPageOptions` | `List<PaginationPerPageOption>?` | [PaginationPerPageOption.defaults] | Dropdown entries for the page-size picker |
+| `paginationLabels` | `PaginationControlLabels?` | English defaults | Localizable strings for the pagination row |
+| `showPerPageDropdown` | `bool` | `true` | Show the page-size dropdown when [onPerPageChanged] is set |
+| `onNext` | `void Function(int)?` | — | Called when Next / Last page is tapped |
+| `onPrev` | `void Function(int)?` | — | Called when Prev / First page is tapped |
+| `onPerPageChanged` | `void Function(int)?` | — | Called when the page-size dropdown changes (`0` = all rows, if supported) |
 | `hidePagination` | `bool` | `false` | Hide the pagination row entirely |
 | `title` | `String?` | — | Table title shown in the toolbar |
 | `showTitleToolbar` | `bool` | `true` | When `false`, hides the entire title toolbar (title, style picker, search, export) |
@@ -159,7 +162,8 @@ class _MyPageState extends State<MyPage> {
 | `expandedRowBuilder` | `Widget Function?` | — | Builder for expandable row detail panel |
 | `maxHeight` | `double?` | `400` | Maximum table height in pixels |
 | `showSumTotals` | `bool` | `false` | Auto-calculate and show column sum totals |
-| `totalRow` | `List<dynamic>?` | — | Manually supplied totals row values |
+| `totalRow` | `List<dynamic>?` | — | Manually supplied totals row values (legacy positional list) |
+| `totalRowByColumnKey` | `Map<String, String>?` | — | Footer labels keyed by [TableColumn.key]; aligns under data columns when actions/checkbox columns are present |
 | `rowFormattingRules` | `List<RowFormattingRule>?` | — | Conditional row background/text color rules |
 | `enableInlineEditing` | `bool` | `false` | Click a cell to edit it inline |
 | `editableColumns` | `Set<String>?` | — | Restrict inline editing to these column keys |
@@ -273,6 +277,50 @@ CustomDataTable(
       case ActionKeys.delete: _deleteItem(rowData); break;
     }
   },
+)
+```
+
+---
+
+## Pagination
+
+When `onNext` / `onPrev` are set, **`CustomDataTable`** renders an embedded
+**`CustomPaginationControlWidget`** below the table (no separate pagination widget required).
+
+```dart
+CustomDataTable(
+  perPage: 25,
+  currentPage: page,
+  lastPage: lastPage,
+  perPageOptions: PaginationPerPageOption.defaults,
+  showPerPageDropdown: true,
+  paginationLabels: const PaginationControlLabels(
+    showPrefix: 'Show',
+    perPageHint: 'Limit',
+    page: 'Page',
+    pageOf: 'of',
+  ),
+  onNext: (p) => setState(() => page = p),
+  onPrev: (p) => setState(() => page = p),
+  onPerPageChanged: (size) => setState(() {
+    perPage = size;
+    page = 1;
+  }),
+  hidePagination: false,
+  // ...
+)
+```
+
+Use **`totalRowByColumnKey`** when footer totals must sit under specific columns (e.g. amount under `total`, label under `name`) while an actions column is pinned on the right:
+
+```dart
+CustomDataTable(
+  totalRowByColumnKey: const {
+    'name': 'Total',
+    'total': '1,234.56',
+    'status': 'Paid: 18 · Due: 7',
+  },
+  // ...
 )
 ```
 

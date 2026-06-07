@@ -1,3 +1,10 @@
+## 0.1.2
+
+* **`CustomPaginationControlWidget`** — embedded in **`CustomDataTable`** footer row (first/prev/next/last + optional per-page dropdown).
+* **`CustomDataTable.perPageOptions`**, **`paginationLabels`**, **`showPerPageDropdown`** — configure page-size choices and localized pagination strings.
+* **`CustomDataTable.totalRowByColumnKey`** — footer totals align under the correct data columns when synthetic columns (actions, checkbox, row number) are present.
+* **Tests** — widget tests for footer alignment (`totalRowByColumnKey`) and pagination controls.
+
 ## 0.1.1
 
 * `CustomDataTable.showTitleToolbar` — when `false`, hides the entire title toolbar (title, style picker, search, export) without changing other toolbar flags.

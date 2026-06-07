@@ -7,9 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/pagination_per_page_option.dart';
 import '../models/table_action.dart';
 import '../models/table_column.dart';
 import '../theme/table_theme.dart';
+import 'custom_pagination_control_widget.dart';
 
 export '../theme/table_theme.dart' show TableStylePreset, TableStylePresets, TableSurfaceTone;
 
@@ -53,6 +55,8 @@ class CustomDataTable extends StatefulWidget {
 
   // --- Footer / totals ---
   final List<dynamic>? totalRow;
+  /// Preferred footer API: values keyed by [TableColumn.key] (survives column hide/reorder).
+  final Map<String, String>? totalRowByColumnKey;
   final bool showSumTotals;
 
   // --- Text styles ---
@@ -71,6 +75,9 @@ class CustomDataTable extends StatefulWidget {
   final int perPage;
   final int currentPage;
   final int lastPage;
+  final List<PaginationPerPageOption>? perPageOptions;
+  final PaginationControlLabels? paginationLabels;
+  final bool showPerPageDropdown;
   final void Function(int pageNo)? onNext;
   final void Function(int pageNo)? onPrev;
   final void Function(int perPage)? onPerPageChanged;
@@ -210,6 +217,7 @@ class CustomDataTable extends StatefulWidget {
     this.data,
     // Footer
     this.totalRow,
+    this.totalRowByColumnKey,
     this.showSumTotals = false,
     // Styles
     this.headerTextStyle,
@@ -224,6 +232,9 @@ class CustomDataTable extends StatefulWidget {
     required this.perPage,
     required this.currentPage,
     required this.lastPage,
+    this.perPageOptions,
+    this.paginationLabels,
+    this.showPerPageDropdown = true,
     this.onNext,
     this.onPrev,
     this.onPerPageChanged,
@@ -500,7 +511,10 @@ class _CustomDataTableState extends State<CustomDataTable> {
   // Data init helpers
   // ---------------------------------------------------------------------------
 
-  bool get _hasFooterContent => widget.totalRow != null || widget.showSumTotals;
+  bool get _hasFooterContent =>
+      widget.totalRow != null ||
+      (widget.totalRowByColumnKey != null && widget.totalRowByColumnKey!.isNotEmpty) ||
+      widget.showSumTotals;
 
   void _initializeData() {
     if (widget.columns != null && widget.data != null) {
@@ -1316,7 +1330,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
       final parentMaxHeight = constraints.maxHeight.isFinite
           ? constraints.maxHeight
           : MediaQuery.of(context).size.height;
-      final reserved = widget.totalRow != null ? 140.0 : 80.0;
+      final reserved = _hasFooterContent ? 140.0 : 80.0;
       final contentHeight = widget.maxHeight != null
           ? math.min(widget.maxHeight!, parentMaxHeight - reserved)
           : math.max(200.0, parentMaxHeight - reserved);
@@ -1385,7 +1399,9 @@ class _CustomDataTableState extends State<CustomDataTable> {
                   ),
 
                   // ---- Footer row ----
-                  if (widget.totalRow != null) ...[
+                  if (widget.totalRow != null ||
+                      (widget.totalRowByColumnKey != null &&
+                          widget.totalRowByColumnKey!.isNotEmpty)) ...[
                     const SizedBox(height: 8),
                     _buildTotalRow(context, totalStyle),
                   ] else if (widget.showSumTotals) ...[
@@ -1625,27 +1641,16 @@ class _CustomDataTableState extends State<CustomDataTable> {
   }
 
   Widget _buildPagination(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Text('Page ${widget.currentPage} of ${widget.lastPage}',
-              style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            onPressed:
-                widget.currentPage > 1 ? () => widget.onPrev?.call(widget.currentPage - 1) : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: widget.currentPage < widget.lastPage
-                ? () => widget.onNext?.call(widget.currentPage + 1)
-                : null,
-          ),
-        ],
-      ),
+    return CustomPaginationControlWidget(
+      currentPerPage: widget.perPage,
+      currentPage: widget.currentPage,
+      lastPage: widget.lastPage,
+      perPageOptions: widget.perPageOptions ?? PaginationPerPageOption.defaults,
+      labels: widget.paginationLabels ?? PaginationControlLabels.defaults,
+      showPerPageDropdown: widget.showPerPageDropdown,
+      onPerPageChanged: widget.onPerPageChanged,
+      onNext: widget.onNext,
+      onPrev: widget.onPrev,
     );
   }
 
@@ -2670,41 +2675,146 @@ class _CustomDataTableState extends State<CustomDataTable> {
   // Footer rows
   // ---------------------------------------------------------------------------
 
-  Widget _buildTotalRow(BuildContext context, TextStyle tStyle) {
-    if (widget.totalRow == null) return const SizedBox.shrink();
-    final visible = _visibleColumns;
-    const skip = ['_actions', '_checkbox', '_rowNumber', '_expand'];
-    final dataColsOrdered = visible.where((c) => !skip.contains(c.key)).toList();
+  static const _footerSkipKeys = ['_actions', '_checkbox', '_rowNumber', '_expand'];
 
-    return SingleChildScrollView(
-      controller: _footerHorizontalScrollController ?? _horizontalScrollController,
-      scrollDirection: Axis.horizontal,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.08),
-        child: Row(
-          children: dataColsOrdered.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final col = entry.value;
-            final text = idx < widget.totalRow!.length ? widget.totalRow![idx].toString() : '';
-            return SizedBox(
-              width: _layoutWidth(col),
-              child: Text(text, style: tStyle, textAlign: col.alignment),
-            );
-          }).toList(),
-        ),
+  Map<String, String> _footerCellsByColumnKey() {
+    if (widget.totalRowByColumnKey != null && widget.totalRowByColumnKey!.isNotEmpty) {
+      return Map<String, String>.from(widget.totalRowByColumnKey!);
+    }
+    if (widget.totalRow == null) return {};
+    final map = <String, String>{};
+    final dataCols = _columns.where((c) => !_footerSkipKeys.contains(c.key)).toList();
+    for (var i = 0; i < dataCols.length && i < widget.totalRow!.length; i++) {
+      map[dataCols[i].key] = widget.totalRow![i].toString();
+    }
+    return map;
+  }
+
+  Widget _buildFooterSectionCells(
+    BuildContext context,
+    List<TableColumn> cols,
+    TextStyle tStyle,
+    Map<String, String> footerByKey,
+    double hInset,
+  ) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: hInset),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: cols.map((col) {
+          final text = footerByKey[col.key] ?? '';
+          return SizedBox(
+            width: _layoutWidth(col),
+            child: Text(
+              text,
+              style: tStyle,
+              textAlign: col.alignment,
+              softWrap: true,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }).toList(),
       ),
     );
   }
 
+  /// Footer row uses the same special / frozen / scrollable sections as the body so
+  /// cells line up under body columns (including the pinned actions column).
+  Widget _buildAlignedFooterRow(BuildContext context, TextStyle tStyle, Map<String, String> footerByKey) {
+    final visible = _visibleColumns;
+    final split = _splitColumns(visible);
+    final hInset = _horizontalMargin;
+    final preset = _stylePreset;
+    final resolved = _resolvedStyle!;
+    final footerBg = Theme.of(context).colorScheme.secondary.withValues(alpha: 0.08);
+
+    Widget sectionStrip(List<TableColumn> cols, {bool rightEdge = false}) {
+      if (cols.isEmpty) return const SizedBox.shrink();
+      return SizedBox(
+        width: _sectionOuterWidth(_sumWidths(cols)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: footerBg,
+            border: rightEdge
+                ? Border(
+                    right: BorderSide(
+                      color: resolved.separatorColor,
+                      width: preset.rowSeparatorWidth,
+                    ),
+                  )
+                : null,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: _buildFooterSectionCells(context, cols, tStyle, footerByKey, hInset),
+          ),
+        ),
+      );
+    }
+
+    final hasSplit = split.special.isNotEmpty || split.frozen.isNotEmpty;
+    if (!hasSplit) {
+      return SizedBox(
+        width: _totalScrollWidth(visible),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: footerBg),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: _buildFooterSectionCells(context, visible, tStyle, footerByKey, hInset),
+          ),
+        ),
+      );
+    }
+
+    final sectionCount = (split.special.isNotEmpty ? 1 : 0) +
+        (split.frozen.isNotEmpty ? 1 : 0) +
+        (split.scrollable.isNotEmpty ? 1 : 0);
+    final innerTotalWidth = _sumWidths(split.special) +
+        _sumWidths(split.frozen) +
+        _sumWidths(split.scrollable) +
+        sectionCount * 2 * hInset;
+
+    return SizedBox(
+      width: innerTotalWidth,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (split.special.isNotEmpty)
+            sectionStrip(
+              split.special,
+              rightEdge: split.frozen.isNotEmpty || split.scrollable.isNotEmpty,
+            ),
+          if (split.frozen.isNotEmpty)
+            sectionStrip(split.frozen, rightEdge: split.scrollable.isNotEmpty),
+          if (split.scrollable.isNotEmpty) sectionStrip(split.scrollable),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooterScrollable(BuildContext context, TextStyle tStyle, Map<String, String> footerByKey) {
+    return SingleChildScrollView(
+      controller: _footerHorizontalScrollController ?? _horizontalScrollController,
+      scrollDirection: Axis.horizontal,
+      child: _buildAlignedFooterRow(context, tStyle, footerByKey),
+    );
+  }
+
+  Widget _buildTotalRow(BuildContext context, TextStyle tStyle) {
+    if (widget.totalRow == null &&
+        (widget.totalRowByColumnKey == null || widget.totalRowByColumnKey!.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    return _buildFooterScrollable(context, tStyle, _footerCellsByColumnKey());
+  }
+
   Widget _buildSumTotalsRow(BuildContext context, TextStyle tStyle) {
     if (!widget.showSumTotals || _displayData.isEmpty) return const SizedBox.shrink();
-    final visible = _visibleColumns;
-    const skip = ['_actions', '_checkbox', '_rowNumber', '_expand'];
 
     final totals = <String, double>{};
-    for (final col in visible) {
-      if (skip.contains(col.key)) continue;
+    for (final col in _visibleColumns) {
+      if (_footerSkipKeys.contains(col.key)) continue;
       final nums = _displayData
           .map((r) => _parseNum(r[col.key]))
           .where((v) => v != null)
@@ -2714,27 +2824,10 @@ class _CustomDataTableState extends State<CustomDataTable> {
     }
     if (totals.isEmpty) return const SizedBox.shrink();
 
-    return SingleChildScrollView(
-      controller: _footerHorizontalScrollController ?? _horizontalScrollController,
-      scrollDirection: Axis.horizontal,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.08),
-        child: Row(
-          children: visible.where((c) => !skip.contains(c.key)).map((col) {
-            final sum = totals[col.key];
-            return SizedBox(
-              width: _layoutWidth(col),
-              child: Text(
-                sum != null ? sum.toStringAsFixed(2) : '',
-                style: tStyle,
-                textAlign: col.alignment,
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
+    final footerByKey = <String, String>{
+      for (final entry in totals.entries) entry.key: entry.value.toStringAsFixed(2),
+    };
+    return _buildFooterScrollable(context, tStyle, footerByKey);
   }
 
   double? _parseNum(dynamic v) {
