@@ -1,3 +1,10 @@
+## 0.1.3
+
+* **`CustomDataTable.rowAccentBuilder`** — optional 4px left severity stripe per row (leftmost column section when frozen/special panes are present).
+* **`CustomDataTable.forceStylePreset`** — when `true`, `defaultStylePreset` always applies and any style saved via the runtime style picker is ignored (for design-locked screens).
+* **Style presets consolidated** — 10 built-in presets reduced to 3 polished ones: `barioo` (new default: uppercase muted header, airy rows), `classic` (dense grid with stripes), `compact` (minimal chrome for dialogs). Saved references to removed presets fall back to the default.
+* **Pagination footer redesign** — "Items per page" dropdown, "Showing x–y of N" summary (new **`CustomDataTable.totalItems`** param), and numbered pill page buttons with ellipsis windowing replacing the arrow-only controls. Stacks vertically on narrow layouts.
+
 ## 0.1.2
 
 * **`CustomPaginationControlWidget`** — embedded in **`CustomDataTable`** footer row (first/prev/next/last + optional per-page dropdown).

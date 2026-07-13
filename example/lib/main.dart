@@ -205,7 +205,7 @@ class _BasicDemoState extends State<_BasicDemo> {
             debugPrint('Selected ${indices.length} rows'),
         filterableColumns: const ['status'],
         isLocalSearch: true,
-        defaultStylePreset: TableStylePresets.orbit,
+        defaultStylePreset: TableStylePresets.barioo,
       ),
     );
   }
@@ -305,7 +305,7 @@ class _ExportDemo extends StatelessWidget {
             SnackBar(content: Text('Print triggered: $title')),
           );
         },
-        defaultStylePreset: TableStylePresets.pro,
+        defaultStylePreset: TableStylePresets.classic,
         showSumTotals: true,
       ),
     );
@@ -371,9 +371,9 @@ class _DensityDemo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final presets = [
-      ('Compact (Pro)', TableStylePresets.pro),
-      ('Comfortable (Orbit)', TableStylePresets.orbit),
-      ('Spacious (Frost)', TableStylePresets.frost),
+      ('Classic', TableStylePresets.classic),
+      ('Barioo', TableStylePresets.barioo),
+      ('Compact', TableStylePresets.compact),
     ];
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -414,7 +414,7 @@ class _DarkThemeDemo extends StatefulWidget {
 }
 
 class _DarkThemeDemoState extends State<_DarkThemeDemo> {
-  TableStylePreset _preset = TableStylePresets.prism;
+  TableStylePreset _preset = TableStylePresets.barioo;
 
   @override
   Widget build(BuildContext context) {

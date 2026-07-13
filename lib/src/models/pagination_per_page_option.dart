@@ -36,7 +36,7 @@ class PaginationPerPageOption {
 /// Localizable strings for [CustomPaginationControlWidget].
 class PaginationControlLabels {
   const PaginationControlLabels({
-    this.showPrefix = 'Show',
+    this.showPrefix = 'Items per page',
     this.perPageHint = 'Limit',
     this.page = 'Page',
     this.pageOf = 'of',

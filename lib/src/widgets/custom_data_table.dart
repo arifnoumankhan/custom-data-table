@@ -16,6 +16,12 @@ import 'custom_pagination_control_widget.dart';
 export '../theme/table_theme.dart' show TableStylePreset, TableStylePresets, TableSurfaceTone;
 
 typedef RowColorBuilder = Color Function(BuildContext context, int index);
+/// Optional 4px left severity stripe per data row. Return null → no stripe.
+typedef RowAccentBuilder = Color? Function(
+  BuildContext context,
+  int index,
+  Map<String, dynamic> rowData,
+);
 typedef CellTapCallback = void Function(
     BuildContext context, int rowIndex, int colIndex, dynamic value);
 typedef ActionCallback = void Function(
@@ -70,6 +76,9 @@ class CustomDataTable extends StatefulWidget {
 
   // --- Row coloring ---
   final RowColorBuilder? rowColorBuilder;
+  /// 4px left accent stripe (e.g. stock severity). Painted on the leftmost
+  /// column section only when frozen/special panes are present.
+  final RowAccentBuilder? rowAccentBuilder;
 
   // --- Pagination ---
   final int perPage;
@@ -204,6 +213,13 @@ class CustomDataTable extends StatefulWidget {
   // --- Style presets ---
   final List<TableStylePreset> stylePresets;
   final TableStylePreset? defaultStylePreset;
+
+  /// When true, [defaultStylePreset] always wins: a style saved via the
+  /// runtime style picker is ignored on load (design-locked screens).
+  final bool forceStylePreset;
+
+  /// Total rows across ALL pages — enables "Showing x–y of N" in the footer.
+  final int? totalItems;
   final bool enableStylePicker;
   final ValueChanged<TableStylePreset>? onStylePresetChanged;
 
@@ -228,6 +244,7 @@ class CustomDataTable extends StatefulWidget {
     this.defaultColumnWidth = 160,
     // Colors
     this.rowColorBuilder,
+    this.rowAccentBuilder,
     // Pagination
     required this.perPage,
     required this.currentPage,
@@ -330,6 +347,8 @@ class CustomDataTable extends StatefulWidget {
     // Style presets
     this.stylePresets = TableStylePresets.builtIn,
     this.defaultStylePreset,
+    this.forceStylePreset = false,
+    this.totalItems,
     this.enableStylePicker = true,
     this.onStylePresetChanged,
   })  : assert((headers != null && rows != null) || (columns != null && data != null),
@@ -399,7 +418,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
   void initState() {
     super.initState();
     _searchController = TextEditingController(text: widget.searchQuery);
-    _stylePreset = widget.defaultStylePreset ?? TableStylePresets.orbit;
+    _stylePreset = widget.defaultStylePreset ?? TableStylePresets.barioo;
     _initializeData();
     _columnOrder = List.generate(_columns.length, (i) => i);
     resolvedWidths = _columns.map((col) => col.width ?? widget.defaultColumnWidth).toList();
@@ -696,7 +715,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
     if (prefs['frozenColumns'] is List) {
       _runtimeFrozenColumns = (prefs['frozenColumns'] as List).map((e) => e.toString()).toSet();
     }
-    if (prefs['style'] is String) {
+    if (!widget.forceStylePreset && prefs['style'] is String) {
       final found = TableStylePresets.findById(prefs['style'] as String);
       if (found != null) _stylePreset = found;
     }
@@ -1651,6 +1670,8 @@ class _CustomDataTableState extends State<CustomDataTable> {
       onPerPageChanged: widget.onPerPageChanged,
       onNext: widget.onNext,
       onPrev: widget.onPrev,
+      totalItems: widget.totalItems,
+      rowsOnPage: _displayData.length,
     );
   }
 
@@ -1734,7 +1755,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
       horizontalMargin: _horizontalMargin,
       columns:
           visible.map((c) => _buildDataColumn(context, c, headerStyle, bodyOnly: true)).toList(),
-      rows: _buildRows(context, visible, cellStyle, false),
+      rows: _buildRows(context, visible, cellStyle, false, paintLeadingAccent: true),
     );
 
     return Column(children: [
@@ -1999,24 +2020,32 @@ class _CustomDataTableState extends State<CustomDataTable> {
     }
 
     Widget sectionCells(List<TableColumn> cols, Map<String, dynamic> rowData, int index,
-        TextStyle style, RowFormattingRule? rule) {
+        TextStyle style, RowFormattingRule? rule,
+        {Color? leadingAccent}) {
       return Padding(
         padding: EdgeInsets.symmetric(horizontal: hInset),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: cols.map((col) {
-            final w = _layoutWidth(col);
-            final isControl =
-                const ['_actions', '_checkbox', '_expand', '_rowNumber'].contains(col.key);
-            final inner = _buildCellChild(context, col, rowData, index, style, rule: rule);
-            return SizedBox(
-              width: w,
-              child: Align(
-                alignment: isControl ? Alignment.center : Alignment.topLeft,
-                child: inner,
-              ),
-            );
-          }).toList(),
+          children: [
+            for (var c = 0; c < cols.length; c++)
+              Builder(builder: (_) {
+                final col = cols[c];
+                final w = _layoutWidth(col);
+                final isControl =
+                    const ['_actions', '_checkbox', '_expand', '_rowNumber'].contains(col.key);
+                final inner = _buildCellChild(context, col, rowData, index, style, rule: rule);
+                return SizedBox(
+                  width: w,
+                  child: Align(
+                    alignment: isControl ? Alignment.center : Alignment.topLeft,
+                    child: _wrapAccent(
+                      accent: c == 0 ? leadingAccent : null,
+                      child: inner,
+                    ),
+                  ),
+                );
+              }),
+          ],
         ),
       );
     }
@@ -2031,8 +2060,10 @@ class _CustomDataTableState extends State<CustomDataTable> {
         final bgColor = _rowBgColor(context, index, rule);
         final style = _effectiveCellStyle(cellStyle, rule);
         final border = rowBorder(index);
+        final accent = widget.rowAccentBuilder?.call(context, index, rowData);
 
-        Widget sectionStrip(List<TableColumn> cols, double innerW, {bool rightEdge = false}) {
+        Widget sectionStrip(List<TableColumn> cols, double innerW,
+            {bool rightEdge = false, Color? leadingAccent}) {
           final outerW = innerW + 2 * hInset;
           return SizedBox(
             width: outerW,
@@ -2047,7 +2078,8 @@ class _CustomDataTableState extends State<CustomDataTable> {
                               color: resolved.separatorColor, width: preset.rowSeparatorWidth))
                       : border,
                 ),
-                child: sectionCells(cols, rowData, index, style, rule),
+                child: sectionCells(cols, rowData, index, style, rule,
+                    leadingAccent: leadingAccent),
               ),
             ),
           );
@@ -2059,10 +2091,16 @@ class _CustomDataTableState extends State<CustomDataTable> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (special.isNotEmpty) sectionStrip(special, specialW),
+                if (special.isNotEmpty)
+                  sectionStrip(special, specialW, leadingAccent: accent),
                 if (frozen.isNotEmpty)
-                  sectionStrip(frozen, frozenW, rightEdge: scrollable.isNotEmpty),
-                if (scrollable.isNotEmpty) sectionStrip(scrollable, scrollableW),
+                  sectionStrip(frozen, frozenW,
+                      rightEdge: scrollable.isNotEmpty,
+                      leadingAccent: special.isEmpty ? accent : null),
+                if (scrollable.isNotEmpty)
+                  sectionStrip(scrollable, scrollableW,
+                      leadingAccent:
+                          special.isEmpty && frozen.isEmpty ? accent : null),
               ],
             ),
           ),
@@ -2166,7 +2204,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
       columnSpacing: 0,
       horizontalMargin: _horizontalMargin,
       columns: cols.map((c) => _buildDataColumn(context, c, headerStyle)).toList(),
-      rows: _buildRows(context, cols, cellStyle, isFrozen),
+      rows: _buildRows(context, cols, cellStyle, isFrozen, paintLeadingAccent: true),
     );
   }
 
@@ -2395,8 +2433,9 @@ class _CustomDataTableState extends State<CustomDataTable> {
     BuildContext context,
     List<TableColumn> cols,
     TextStyle cellStyle,
-    bool isFrozen,
-  ) {
+    bool isFrozen, {
+    bool paintLeadingAccent = false,
+  }) {
     final rows = <DataRow>[];
 
     for (int i = 0; i < _displayData.length; i++) {
@@ -2404,19 +2443,26 @@ class _CustomDataTableState extends State<CustomDataTable> {
       final rule = _matchFormattingRule(rowData, i);
       final bg = _rowBgColor(context, i, rule);
       final style = _effectiveCellStyle(cellStyle, rule);
+      final accent = paintLeadingAccent
+          ? widget.rowAccentBuilder?.call(context, i, rowData)
+          : null;
 
       rows.add(DataRow(
         key: ValueKey('row_${_rowId(rowData)}'),
         color: WidgetStateProperty.all(bg),
-        cells: cols
-            .map((c) => DataCell(
-                  _buildCellChild(context, c, rowData, i, style, rule: rule),
-                  onTap: c.clickable
-                      ? () =>
-                          widget.onCellTap?.call(context, i, _columns.indexOf(c), rowData[c.key])
-                      : null,
-                ))
-            .toList(),
+        cells: [
+          for (var c = 0; c < cols.length; c++)
+            DataCell(
+              _wrapAccent(
+                accent: c == 0 ? accent : null,
+                child: _buildCellChild(context, cols[c], rowData, i, style, rule: rule),
+              ),
+              onTap: cols[c].clickable
+                  ? () => widget.onCellTap
+                      ?.call(context, i, _columns.indexOf(cols[c]), rowData[cols[c].key])
+                  : null,
+            ),
+        ],
       ));
 
       if (widget.expandedRowBuilder != null && _expandedRows.contains(i)) {
@@ -2436,6 +2482,16 @@ class _CustomDataTableState extends State<CustomDataTable> {
       }
     }
     return rows;
+  }
+
+  Widget _wrapAccent({required Color? accent, required Widget child}) {
+    if (accent == null) return child;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: accent, width: 4)),
+      ),
+      child: child,
+    );
   }
 
   // ---------------------------------------------------------------------------
