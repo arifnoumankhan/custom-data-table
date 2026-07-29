@@ -1,5 +1,5 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![pub version](https://img.shields.io/badge/version-0.1.2-blue)](pubspec.yaml)
+[![pub version](https://img.shields.io/badge/version-0.1.4-blue)](pubspec.yaml)
 
 # custom_data_table
 
@@ -28,7 +28,7 @@ A feature-rich, themeable Flutter data table with:
 
 ```yaml
 dependencies:
-  custom_data_table: ^0.1.2
+  custom_data_table: ^0.1.4
 ```
 
 ### From GitHub
@@ -38,7 +38,7 @@ dependencies:
   custom_data_table:
     git:
       url: https://github.com/arifnoumankhan/custom-data-table.git
-      ref: v0.1.2   # or main for latest
+      ref: v0.1.4   # or main for latest
 ```
 
 ### Local path (development)
@@ -153,6 +153,14 @@ class _MyPageState extends State<MyPage> {
 | `onRowsSelected` | `Function?` | — | `(selectedIndices, selectedData)` |
 | `showRowNumbers` | `bool` | `false` | Prepend a row-number column |
 | `columnVisibility` | `Map<String, bool>?` | — | Per-key column show/hide map |
+| `showColumnVisibilityMenu` | `bool` | `false` | Show column visibility toggle menu in toolbar |
+| `lockedColumns` | `Set<String>?` | — | Column keys excluded from visibility menu (always visible) |
+| `initialColumnVisibility` | `Map<String, bool>?` | — | Initial visibility state; used by Reset button |
+| `onColumnVisibilityChanged` | `Function(Map<String, bool>)?` | — | Called when column visibility changes via menu |
+| `columnVisibilityIcon` | `IconData?` | `Icons.view_column` | Icon for column visibility menu button |
+| `columnVisibilityTooltip` | `String?` | `'Columns'` | Tooltip for column visibility menu button |
+| `exportColumns` | `Set<String>?` | — | Override: export only these column keys |
+| `exportExceptColumns` | `Set<String>?` | — | Override: export all columns except these keys |
 | `enableColumnResizing` | `bool` | `true` | Allow drag-resizing column widths |
 | `enableColumnReordering` | `bool` | `false` | Allow drag-reordering columns |
 | `frozenColumnsCount` | `int?` | — | Number of leading data columns to freeze |
@@ -339,6 +347,55 @@ CustomDataTable(
   },
 )
 ```
+
+---
+
+## Column Visibility Control
+
+Enable the column visibility menu to let users show/hide columns at runtime:
+
+```dart
+CustomDataTable(
+  showColumnVisibilityMenu: true,
+  preferencesKey: 'my_table_columns',  // persist visibility state
+  initialColumnVisibility: const {
+    'id': true,
+    'email': true,
+    'status': false,  // hidden by default
+  },
+  lockedColumns: const {'id'},  // always visible, excluded from menu
+  onColumnVisibilityChanged: (visibility) {
+    debugPrint('Visibility changed: $visibility');
+  },
+  // ...
+)
+```
+
+### Menu Features
+
+- **Show All / Hide All / Reset** — quick actions for bulk visibility changes
+- **Real-time updates** — table refreshes immediately when checkboxes are toggled
+- **Persistent state** — saves to `SharedPreferences` when `preferencesKey` is set
+- **Locked columns** — exclude critical columns from the menu via `lockedColumns`
+- **Export control** — exported data respects visible columns by default
+
+### Export Overrides
+
+Control which columns are exported independently of visibility:
+
+```dart
+CustomDataTable(
+  showColumnVisibilityMenu: true,
+  exportColumns: const {'id', 'name', 'email'},  // export only these
+  // OR
+  exportExceptColumns: const {'internal_notes'},  // export all except these
+  onExportCsv: (rows, headers) {
+    // rows contain only the specified columns
+  },
+)
+```
+
+When neither `exportColumns` nor `exportExceptColumns` is set, export uses visible columns. Locked columns are always included in export.
 
 ---
 

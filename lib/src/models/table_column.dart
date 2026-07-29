@@ -54,6 +54,9 @@ class TableColumn {
   /// Also applied during CSV/Excel/PDF export.
   final String Function(dynamic value)? valueFormatter;
 
+  /// Lock column visible — excluded from visibility menu, always rendered.
+  final bool alwaysVisible;
+
   const TableColumn({
     required this.key,
     required this.header,
@@ -64,6 +67,7 @@ class TableColumn {
     this.textOverflow = TableTextOverflow.wrap,
     this.customCellBuilder,
     this.valueFormatter,
+    this.alwaysVisible = false,
   });
 }
 

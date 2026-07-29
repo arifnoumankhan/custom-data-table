@@ -1,3 +1,9 @@
+## 0.1.4
+
+* **Column visibility menu fixes** — resolved width overflow and checkbox reactivity issues. Menu now constrains to 250-300px width with proper wrapping. StatefulBuilder reads fresh `_effectiveColumnVisibility` on each rebuild, ensuring checkboxes and count update immediately when toggled. Action buttons replaced with compact `InkWell` widgets to prevent overflow on narrow screens.
+* **Column visibility menu improvements** — reduced font sizes (11px), changed count format from "(X of Y)" to "(X/Y)", wrapped action bar in `Wrap` for responsive layout, added tooltip threshold (30 chars) for long column names.
+* **Export column control** — respects column visibility state when exporting; exportable column count displayed in export menu tooltip.
+
 ## 0.1.3
 
 * **`CustomDataTable.rowAccentBuilder`** — optional 4px left severity stripe per row (leftmost column section when frozen/special panes are present).

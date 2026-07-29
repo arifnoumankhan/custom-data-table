@@ -129,6 +129,16 @@ class CustomDataTable extends StatefulWidget {
 
   // --- Column visibility ---
   final Map<String, bool>? columnVisibility;
+  final bool showColumnVisibilityMenu;
+  final List<String>? lockedColumns;
+  final Map<String, bool>? initialColumnVisibility;
+  final void Function(Map<String, bool> visibility)? onColumnVisibilityChanged;
+  final IconData? columnVisibilityIcon;
+  final String? columnVisibilityTooltip;
+
+  // --- Export column control ---
+  final List<String>? exportColumns;
+  final List<String>? exportExceptColumns;
 
   // --- Sorting ---
   final bool enableSorting;
@@ -286,6 +296,15 @@ class CustomDataTable extends StatefulWidget {
     this.onRowsSelected,
     // Visibility
     this.columnVisibility,
+    this.showColumnVisibilityMenu = false,
+    this.lockedColumns,
+    this.initialColumnVisibility,
+    this.onColumnVisibilityChanged,
+    this.columnVisibilityIcon,
+    this.columnVisibilityTooltip,
+    // Export control
+    this.exportColumns,
+    this.exportExceptColumns,
     // Sorting
     this.enableSorting = true,
     this.enableMultiSort = false,
@@ -410,6 +429,10 @@ class _CustomDataTableState extends State<CustomDataTable> {
   bool _isSyncingScroll = false;
   late TextEditingController _searchController;
 
+  // Column visibility state
+  Map<String, bool> _internalColumnVisibility = {};
+  Timer? _columnVisibilitySaveTimer;
+
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -417,6 +440,15 @@ class _CustomDataTableState extends State<CustomDataTable> {
   @override
   void initState() {
     super.initState();
+    
+    // Validate column visibility menu requirements
+    if (widget.showColumnVisibilityMenu) {
+      assert(
+        widget.preferencesKey != null,
+        'showColumnVisibilityMenu requires preferencesKey to be set for persistence',
+      );
+    }
+    
     _searchController = TextEditingController(text: widget.searchQuery);
     _stylePreset = widget.defaultStylePreset ?? TableStylePresets.barioo;
     _initializeData();
@@ -428,6 +460,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
     if (widget.saveColumnPreferences && widget.preferencesKey != null) {
       _loadPreferencesFromStorage();
     }
+    _loadColumnVisibility();
     _generateFilterOptions();
 
     _horizontalScrollController = ScrollController();
@@ -586,7 +619,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
     if (widget.showActions &&
         ((widget.actions?.isNotEmpty ?? false) || (widget.actionWidgets?.isNotEmpty ?? false))) {
       _columns
-          .add(const TableColumn(key: '_actions', header: 'Actions', width: null, sortable: false));
+          .add(const TableColumn(key: '_actions', header: '', width: null, sortable: false));
     }
   }
 
@@ -1117,22 +1150,143 @@ class _CustomDataTableState extends State<CustomDataTable> {
   // Export
   // ---------------------------------------------------------------------------
 
-  List<String> _exportHeaders() {
+  List<TableColumn> _exportableColumns() {
+    // 1. Start with explicit export override or visible columns
+    var cols = widget.exportColumns != null
+        ? _columns.where((c) => widget.exportColumns!.contains(c.key))
+        : _visibleColumns;
+
+    // 2. Remove system columns
     const skip = ['_rowNumber', '_checkbox', '_actions', '_expand'];
-    return _visibleColumns.where((c) => !skip.contains(c.key)).map((c) => c.header).toList();
+    cols = cols.where((c) => !skip.contains(c.key));
+
+    // 3. Apply exclusions
+    if (widget.exportExceptColumns != null) {
+      cols = cols.where((c) => !widget.exportExceptColumns!.contains(c.key));
+    }
+
+    return cols.toList();
+  }
+
+  List<String> _exportHeaders() {
+    return _exportableColumns().map((c) => c.header).toList();
   }
 
   List<List<dynamic>> _exportData() {
     final rows = _selectedRows.isNotEmpty
         ? _selectedRows.map((i) => _displayData[i]).toList()
         : _displayData;
-    const skip = ['_rowNumber', '_checkbox', '_actions', '_expand'];
+    final cols = _exportableColumns();
     return rows.map((row) {
-      return _visibleColumns.where((c) => !skip.contains(c.key)).map((c) {
+      return cols.map((c) {
         final v = row[c.key];
         return c.valueFormatter != null ? c.valueFormatter!(v) : v?.toString() ?? '';
       }).toList();
     }).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Column visibility
+  // ---------------------------------------------------------------------------
+
+  /// Check if column is locked (system col, alwaysVisible, or in lockedColumns).
+  bool _isColumnLocked(String key) {
+    const systemCols = ['_rowNumber', '_checkbox', '_actions', '_expand'];
+    if (systemCols.contains(key)) return true;
+
+    final col = _columns.firstWhere((c) => c.key == key, orElse: () => _columns.first);
+    if (col.alwaysVisible) return true;
+
+    if (widget.lockedColumns?.contains(key) ?? false) return true;
+
+    return false;
+  }
+
+  /// Columns that can be toggled in visibility menu (excludes locked columns).
+  List<TableColumn> get _toggleableColumns {
+    return _columns.where((c) => !_isColumnLocked(c.key)).toList();
+  }
+
+  /// Effective column visibility map: external control or internal state.
+  Map<String, bool> get _effectiveColumnVisibility {
+    return widget.columnVisibility ?? _internalColumnVisibility;
+  }
+
+  Future<void> _loadColumnVisibility() async {
+    // External mode: parent controls visibility, skip loading
+    if (widget.columnVisibility != null) return;
+    
+    // Internal mode: load from SharedPreferences
+    if (!widget.showColumnVisibilityMenu) return;
+    
+    assert(
+      widget.preferencesKey != null,
+      'showColumnVisibilityMenu requires preferencesKey to be set',
+    );
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '${widget.preferencesKey}_column_visibility';
+      final json = prefs.getString(key);
+      
+      if (json != null && json.isNotEmpty) {
+        final decoded = jsonDecode(json) as Map<String, dynamic>;
+        if (mounted) {
+          setState(() {
+            _internalColumnVisibility = decoded.cast<String, bool>();
+          });
+        }
+      } else if (widget.initialColumnVisibility != null) {
+        // First load, use initial visibility
+        if (mounted) {
+          setState(() {
+            _internalColumnVisibility = Map.from(widget.initialColumnVisibility!);
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load column visibility: $e');
+    }
+  }
+
+  void _saveColumnVisibility() {
+    // External mode: parent owns state, skip saving
+    if (widget.columnVisibility != null) return;
+    
+    if (!widget.showColumnVisibilityMenu) return;
+    
+    assert(
+      widget.preferencesKey != null,
+      'showColumnVisibilityMenu requires preferencesKey to be set',
+    );
+
+    // Debounce: cancel previous timer, schedule new save
+    _columnVisibilitySaveTimer?.cancel();
+    _columnVisibilitySaveTimer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final key = '${widget.preferencesKey}_column_visibility';
+        final json = jsonEncode(_internalColumnVisibility);
+        await prefs.setString(key, json);
+      } catch (e) {
+        debugPrint('Failed to save column visibility: $e');
+      }
+    });
+  }
+
+  void _onColumnVisibilityChanged(Map<String, bool> visibility) {
+    if (mounted) {
+      setState(() {
+        if (widget.columnVisibility == null) {
+          // Internal mode: update internal state
+          _internalColumnVisibility = Map.from(visibility);
+          _saveColumnVisibility();
+        }
+      });
+    }
+    
+    // Fire callback in both modes
+    widget.onColumnVisibilityChanged?.call(visibility);
   }
 
   // ---------------------------------------------------------------------------
@@ -1146,11 +1300,16 @@ class _CustomDataTableState extends State<CustomDataTable> {
     } else {
       cols = List.from(_columns);
     }
-    if (widget.columnVisibility == null) return cols;
+    
+    // Use effective visibility (external or internal)
+    final visibility = _effectiveColumnVisibility;
+    if (visibility.isEmpty) return cols;
+    
     const alwaysVisible = ['_rowNumber', '_checkbox', '_actions', '_expand'];
     return cols.where((c) {
       if (alwaysVisible.contains(c.key)) return true;
-      return widget.columnVisibility![c.key] ?? true;
+      if (_isColumnLocked(c.key)) return true;
+      return visibility[c.key] ?? true;
     }).toList();
   }
 
@@ -1161,10 +1320,28 @@ class _CustomDataTableState extends State<CustomDataTable> {
   double get _horizontalMargin =>
       math.max(12.0, math.max(widget.cellPadding.left, widget.cellPadding.right));
 
+  /// Extra width per data column when the table is narrower than its
+  /// viewport — kills the phantom horizontal scrollbar on wide screens.
+  double _stretchBonus = 0;
+
+  static const _stretchSkipKeys = ['_checkbox', '_rowNumber', '_actions', '_expand'];
+
   double _layoutWidth(TableColumn col) {
     final idx = _columns.indexOf(col);
     final w = idx < resolvedWidths.length ? resolvedWidths[idx] : widget.defaultColumnWidth;
-    return w.roundToDouble();
+    final bonus = _stretchSkipKeys.contains(col.key) ? 0.0 : _stretchBonus;
+    return (w + bonus).roundToDouble();
+  }
+
+  void _updateStretchBonus(double maxWidth) {
+    _stretchBonus = 0;
+    if (!maxWidth.isFinite) return;
+    final visible = _visibleColumns;
+    final base = _totalScrollWidth(visible);
+    final dataCols =
+        visible.where((c) => !_stretchSkipKeys.contains(c.key)).length;
+    if (dataCols == 0 || base >= maxWidth) return;
+    _stretchBonus = (maxWidth - base) / dataCols;
   }
 
   List<double> _resolveColumnWidths(BuildContext context) {
@@ -1206,24 +1383,13 @@ class _CustomDataTableState extends State<CustomDataTable> {
       final scale = available / totalWidth;
       return widths.map((w) => w * scale).toList();
     }
-    if (totalWidth < available) {
-      const specialKeys = ['_checkbox', '_rowNumber', '_actions', '_expand'];
-      final dataIndices = [
-        for (int i = 0; i < _columns.length; i++)
-          if (!specialKeys.contains(_columns[i].key)) i
-      ];
-      if (dataIndices.isNotEmpty) {
-        final dataTotal = dataIndices.fold<double>(0.0, (s, i) => s + widths[i]);
-        if (dataTotal > 0) {
-          final extra = available - totalWidth;
-          final expanded = List<double>.from(widths);
-          for (final i in dataIndices) {
-            expanded[i] = widths[i] + extra * (widths[i] / dataTotal);
-          }
-          return expanded;
-        }
-      }
-    }
+    // Stretch-to-fill for narrower-than-viewport tables is handled by
+    // _updateStretchBonus/_layoutWidth using the real LayoutBuilder
+    // constraints of this widget's container. Doing it here too (based on
+    // MediaQuery's screen width, which can be much wider than the actual
+    // container) double-stretches columns — most visible with few columns,
+    // where the double-counted leftover space concentrates into just 1-2
+    // columns.
     return widths;
   }
 
@@ -1346,6 +1512,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
         : BorderSide.none;
 
     return LayoutBuilder(builder: (context, constraints) {
+      _updateStretchBonus(constraints.maxWidth);
       final parentMaxHeight = constraints.maxHeight.isFinite
           ? constraints.maxHeight
           : MediaQuery.of(context).size.height;
@@ -1493,6 +1660,10 @@ class _CustomDataTableState extends State<CustomDataTable> {
                         _savePreferences();
                       },
                     ),
+                  if (widget.showColumnVisibilityMenu) ...[
+                    const SizedBox(width: 8),
+                    _buildColumnVisibilityMenu(context),
+                  ],
                   if (!isMobile && widget.showSearch) ...[
                     const SizedBox(width: 8),
                     SizedBox(width: 280, child: _buildSearchField(context)),
@@ -1521,6 +1692,164 @@ class _CustomDataTableState extends State<CustomDataTable> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
       ),
       onChanged: _onSearchChanged,
+    );
+  }
+
+  Widget _buildColumnVisibilityMenu(BuildContext context) {
+    if (!widget.showColumnVisibilityMenu) return const SizedBox.shrink();
+    
+    final toggleable = _toggleableColumns;
+    if (toggleable.isEmpty) return const SizedBox.shrink();
+
+    final totalCount = toggleable.length;
+
+    // Check if there are any locked data columns
+    final lockedDataCols = _columns.where((c) => 
+      _isColumnLocked(c.key) && 
+      !['_rowNumber', '_checkbox', '_actions', '_expand'].contains(c.key)
+    ).toList();
+    final hasLockedDataCols = lockedDataCols.isNotEmpty;
+
+    return PopupMenuButton<String>(
+      tooltip: widget.columnVisibilityTooltip ?? 'Columns',
+      icon: Icon(widget.columnVisibilityIcon ?? Icons.view_column),
+      itemBuilder: (context) {
+        return [
+          PopupMenuItem<String>(
+            enabled: false,
+            child: StatefulBuilder(
+              builder: (context, setMenuState) {
+                // IMPORTANT: Read fresh state on each rebuild
+                final visibility = _effectiveColumnVisibility;
+                final currentVisibleCount = toggleable.where((c) => visibility[c.key] ?? true).length;
+                
+                return ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: math.min(400, MediaQuery.of(context).size.height * 0.6),
+                    minWidth: 250,
+                    maxWidth: 300,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Action bar with count
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          Wrap(
+                            spacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              InkWell(
+                                onTap: () {
+                                  final newVis = Map<String, bool>.from(visibility);
+                                  for (final col in toggleable) {
+                                    newVis[col.key] = true;
+                                  }
+                                  _onColumnVisibilityChanged(newVis);
+                                  setMenuState(() {});
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  child: Text('Show All', style: TextStyle(fontSize: 11, color: Colors.blue)),
+                                ),
+                              ),
+                              Text('|', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              InkWell(
+                                onTap: () {
+                                  final newVis = Map<String, bool>.from(visibility);
+                                  for (final col in toggleable) {
+                                    newVis[col.key] = false;
+                                  }
+                                  // Auto-show first if no locked data cols
+                                  if (!hasLockedDataCols && toggleable.isNotEmpty) {
+                                    newVis[toggleable.first.key] = true;
+                                  }
+                                  _onColumnVisibilityChanged(newVis);
+                                  setMenuState(() {});
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  child: Text('Hide All', style: TextStyle(fontSize: 11, color: Colors.blue)),
+                                ),
+                              ),
+                              Text('|', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              InkWell(
+                                onTap: () {
+                                  final newVis = widget.initialColumnVisibility != null
+                                      ? Map<String, bool>.from(widget.initialColumnVisibility!)
+                                      : {for (final col in toggleable) col.key: true};
+                                  _onColumnVisibilityChanged(newVis);
+                                  setMenuState(() {});
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  child: Text('Reset', style: TextStyle(fontSize: 11, color: Colors.blue)),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '($currentVisibleCount/$totalCount)',
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 8),
+                      // Scrollable checklist
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: toggleable.map((col) {
+                              final isVisible = visibility[col.key] ?? true;
+                              final isLastVisible = hasLockedDataCols 
+                                  ? false 
+                                  : (currentVisibleCount == 1 && isVisible);
+                              
+                              return CheckboxListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                title: Tooltip(
+                                  message: col.header.length > 30 ? col.header : '',
+                                  child: Text(
+                                    col.header,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isLastVisible ? Colors.grey : null,
+                                    ),
+                                  ),
+                                ),
+                                value: isVisible,
+                                onChanged: isLastVisible ? null : (val) {
+                                  if (val != null) {
+                                    final newVis = Map<String, bool>.from(visibility);
+                                    newVis[col.key] = val;
+                                    _onColumnVisibilityChanged(newVis);
+                                    setMenuState(() {});
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ];
+      },
+      onSelected: (_) {},
     );
   }
 
@@ -1565,7 +1894,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
     if (items.isEmpty) return const SizedBox.shrink();
 
     return PopupMenuButton<String>(
-      tooltip: 'Export',
+      tooltip: 'Export (${_exportableColumns().length} columns)',
       icon: const Icon(Icons.more_vert),
       itemBuilder: (_) => items,
       onSelected: (val) {
@@ -2025,7 +2354,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
       return Padding(
         padding: EdgeInsets.symmetric(horizontal: hInset),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             for (var c = 0; c < cols.length; c++)
               Builder(builder: (_) {
@@ -2037,7 +2366,7 @@ class _CustomDataTableState extends State<CustomDataTable> {
                 return SizedBox(
                   width: w,
                   child: Align(
-                    alignment: isControl ? Alignment.center : Alignment.topLeft,
+                    alignment: isControl ? Alignment.center : Alignment.centerLeft,
                     child: _wrapAccent(
                       accent: c == 0 ? leadingAccent : null,
                       child: inner,
